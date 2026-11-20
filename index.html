@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KMZ Photo Extractor per Penanda</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #121417; color: #eef1f4; margin: 0; padding: 24px; }
+    .box { max-width: 960px; margin: 0 auto; background: #1b1f24; border: 1px solid #2e353e; border-radius: 10px; padding: 20px; }
+    h1 { margin: 0 0 8px; font-size: 20px; }
+    p { margin: 0 0 16px; color: #a4b0be; font-size: 14px; }
+    button, .btn { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
+    button:hover, .btn:hover { background: #1d4ed8; }
+    #status { margin-top: 12px; font-size: 13px; color: #7dd3fc; white-space: pre-line; }
+    .placemark { background: #121417; border: 1px solid #2b313a; border-radius: 8px; padding: 14px; margin-top: 16px; }
+    .pm-title { font-weight: bold; font-size: 16px; color: #93c5fd; margin-bottom: 10px; }
+    .photos { display: flex; flex-wrap: wrap; gap: 12px; }
+    .photo-card { width: 210px; background: #1b1f24; border: 1px solid #2e353e; border-radius: 6px; padding: 8px; }
+    .photo-card img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: #000; }
+    .photo-name { font-size: 11px; color: #cbd5e1; margin: 6px 0; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>KMZ Photo Extractor per Penanda</h1>
+    <p>Klik tombol di bawah untuk memilih file <b>.kmz</b>. Foto akan dikelompokkan sesuai nama penanda.</p>
+    <input type="file" id="kmzInput" accept=".kmz,.zip" style="display:none" />
+    <button type="button" id="pickBtn">Pilih File .KMZ</button>
+    <div id="status">Belum ada file dipilih.</div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const pickBtn = document.getElementById("pickBtn");
+    const kmzInput = document.getElementById("kmzInput");
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+
+    pickBtn.addEventListener("click", () => kmzInput.click());
+
+    kmzInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      resultEl.innerHTML = "";
+      statusEl.textContent = "Membaca file " + file.name + "...";
+
+      try {
+        if (typeof JSZip === "undefined") {
+          throw new Error("Library JSZip gagal dimuat (cek koneksi internet atau blokir script).");
+        }
+
+        const zip = await JSZip.loadAsync(file);
+        const allEntries = Object.keys(zip.files);
+
+        // Cari file KML (biasanya doc.kml)
+        const kmlName = allEntries.find(n => !zip.files[n].dir && n.toLowerCase().endsWith(".kml"));
+        if (!kmlName) {
+          throw new Error("File .kml tidak ditemukan di dalam KMZ.");
+        }
+
+        const kmlText = await zip.files[kmlName].async("string");
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(kmlText, "text/xml");
+
+        const placemarks = Array.from(xmlDoc.getElementsByTagName("Placemark"));
+        let foundCount = 0;
+
+        for (const pm of placemarks) {
+          const nameNode = pm.getElementsByTagName("name")[0];
+          const descNode = pm.getElementsByTagName("description")[0];
+
+          const pmName = (nameNode && nameNode.textContent ? nameNode.textContent.trim() : "Tanpa_Nama")
+            .replace(/[\\/:*?"<>|]/g, "_");
+          const descText = descNode ? (descNode.textContent || "") : "";
+
+          // Ambil nama file gambar yang direferensikan di description
+          const matches = [...descText.matchAll(/(?:files[\\/])?([^\s"'<>]+\.(?:jpg|jpeg|png|webp))/gi)];
+          const uniqueFiles = [...new Set(matches.map(m => m[1].replace(/\\/g, "/")))];
+
+          if (uniqueFiles.length === 0) continue;
+
+          const card = document.createElement("div");
+          card.className = "placemark";
+
+          const title = document.createElement("div");
+          title.className = "pm-title";
+          title.textContent = pmName + " (" + uniqueFiles.length + " foto)";
+          card.appendChild(title);
+
+          const grid = document.createElement("div");
+          grid.className = "photos";
+
+          let idx = 1;
+          for (const rawFile of uniqueFiles) {
+            const baseName = rawFile.split("/").pop();
+            const zipEntryKey = allEntries.find(k => !zip.files[k].dir && (k === rawFile || k === "files/" + baseName || k.endsWith("/" + baseName)));
+            if (!zipEntryKey) continue;
+
+            const blob = await zip.files[zipEntryKey].async("blob");
+            const url = URL.createObjectURL(blob);
+            const downloadName = `${pmName}_${idx}_${baseName}`;
+            idx++;
+            foundCount++;
+
+            const pCard = document.createElement("div");
+            pCard.className = "photo-card";
+            pCard.innerHTML = `
+              <img src="${url}" alt="${downloadName}" />
+              <div class="photo-name">${downloadName}</div>
+              <a class="btn" href="${url}" download="${downloadName}">Download</a>
+            `;
+            grid.appendChild(pCard);
+          }
+
+          if (grid.children.length > 0) {
+            card.appendChild(grid);
+            resultEl.appendChild(card);
+          }
+        }
+
+        statusEl.textContent = `Selesai. Total foto terpetakan: ${foundCount}`;
+      } catch (err) {
+        statusEl.textContent = "Error: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
