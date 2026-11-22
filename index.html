@@ -1,130 +1,1114 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KMZ Photo Extractor per Penanda</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- JSZip CDN untuk membaca arsip KMZ dan mengemas ZIP per folder penanda -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            field: {
+              bg: '#0b0f17',
+              surface: '#131924',
+              elevated: '#1a2232',
+              border: '#263146',
+            }
+          }
+        }
+      }
+    };
+  </script>
   <style>
-    body { font-family: Arial, sans-serif; background: #121417; color: #eef1f4; margin: 0; padding: 24px; }
-    .box { max-width: 960px; margin: 0 auto; background: #1b1f24; border: 1px solid #2e353e; border-radius: 10px; padding: 20px; }
-    h1 { margin: 0 0 8px; font-size: 20px; }
-    p { margin: 0 0 16px; color: #a4b0be; font-size: 14px; }
-    button, .btn { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
-    button:hover, .btn:hover { background: #1d4ed8; }
-    #status { margin-top: 12px; font-size: 13px; color: #7dd3fc; white-space: pre-line; }
-    .placemark { background: #121417; border: 1px solid #2b313a; border-radius: 8px; padding: 14px; margin-top: 16px; }
-    .pm-title { font-weight: bold; font-size: 16px; color: #93c5fd; margin-bottom: 10px; }
-    .photos { display: flex; flex-wrap: wrap; gap: 12px; }
-    .photo-card { width: 210px; background: #1b1f24; border: 1px solid #2e353e; border-radius: 6px; padding: 8px; }
-    .photo-card img { width: 100%; height: 140px; object-fit: cover; border-radius: 4px; background: #000; }
-    .photo-name { font-size: 11px; color: #cbd5e1; margin: 6px 0; word-break: break-all; }
+    /* Scrollbar kustom untuk tema gelap dokumentasi lapangan */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b0f17;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #263146;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #384866;
+    }
   </style>
 </head>
-<body>
-  <div class="box">
-    <h1>KMZ Photo Extractor per Penanda</h1>
-    <p>Klik tombol di bawah untuk memilih file <b>.kmz</b>. Foto akan dikelompokkan sesuai nama penanda.</p>
-    <input type="file" id="kmzInput" accept=".kmz,.zip" style="display:none" />
-    <button type="button" id="pickBtn">Pilih File .KMZ</button>
-    <div id="status">Belum ada file dipilih.</div>
-    <div id="result"></div>
+<body class="bg-field-bg text-slate-100 min-h-screen flex flex-col antialiased selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- Top Navigation Bar -->
+  <header class="sticky top-0 z-30 bg-field-surface/95 backdrop-blur border-b border-field-border">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-400 flex items-center justify-center shrink-0">
+          <!-- Map Pin SVG -->
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-lg font-bold text-white truncate">KMZ Photo Extractor per Penanda</h1>
+          <p class="text-xs text-slate-400 truncate hidden sm:block">Dokumentasi lapangan otomatis: petakan &amp; unduh foto sesuai nama penanda</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          Proses Lokal di Browser
+        </span>
+        <button
+          id="btnResetHeader"
+          type="button"
+          onclick="resetWorkspace()"
+          class="hidden px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium bg-field-elevated hover:bg-slate-700 text-slate-200 border border-field-border transition cursor-pointer"
+        >
+          Ganti File .KMZ
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full px-4 sm:px-0 pointer-events-none"></div>
+
+    <!-- Upload & Drag-Drop Section -->
+    <section id="uploadSection" class="max-w-3xl mx-auto mt-2 sm:mt-6">
+      <div
+        id="dropZone"
+        class="bg-field-surface border-2 border-dashed border-field-border hover:border-sky-400/70 rounded-2xl p-6 sm:p-10 text-center transition-all duration-200 shadow-xl"
+      >
+        <!-- Input file tersembunyi yang dipicu oleh tombol utama -->
+        <input type="file" id="kmzFileInput" accept=".kmz,.zip" class="hidden" />
+
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-sky-500/15 border border-sky-400/25 text-sky-400 flex items-center justify-center">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          </svg>
+        </div>
+
+        <h2 class="text-xl sm:text-2xl font-bold text-white mb-2">Ekstrak Foto per Penanda dari File .KMZ</h2>
+        <p class="text-sm text-slate-400 max-w-xl mx-auto mb-6 leading-relaxed">
+          Pilih file <code class="text-sky-300 bg-field-elevated px-1.5 py-0.5 rounded border border-field-border">.kmz</code> menggunakan tombol utama di bawah atau tarik &amp; lepas (*drag &amp; drop*) file ke area ini. Foto akan otomatis dikelompokkan sesuai nama penanda seperti <code class="text-slate-200 bg-field-elevated px-1.5 py-0.5 rounded">NP_001</code>, <code class="text-slate-200 bg-field-elevated px-1.5 py-0.5 rounded">Telkom_001</code>, atau <code class="text-slate-200 bg-field-elevated px-1.5 py-0.5 rounded">PLN_001</code>.
+        </p>
+
+        <!-- Prominent Primary File Picker Button -->
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            id="btnPilihKmz"
+            type="button"
+            onclick="triggerFilePicker()"
+            class="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-slate-950 font-bold text-sm sm:text-base shadow-lg shadow-sky-500/20 transition flex items-center justify-center gap-2.5 cursor-pointer"
+          >
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+            </svg>
+            <span>Pilih File .KMZ</span>
+          </button>
+        </div>
+
+        <p id="dropHint" class="text-xs text-slate-500 mt-4">
+          Atau tarik &amp; lepas file <span class="text-slate-300">.kmz</span> ke kotak ini • Format file aman diproses lokal
+        </p>
+      </div>
+
+      <!-- Loading & Error Box -->
+      <div id="statusPanel" class="hidden mt-5 rounded-2xl border border-field-border bg-field-surface p-5 shadow-lg">
+        <div id="loadingRow" class="flex items-center gap-3.5">
+          <div class="w-6 h-6 rounded-full border-2 border-sky-400/30 border-t-sky-400 animate-spin shrink-0"></div>
+          <p id="loadingMessage" class="text-sm font-medium text-slate-200">Membaca arsip KMZ...</p>
+        </div>
+
+        <div id="errorRow" class="hidden items-start gap-3 text-rose-300">
+          <svg class="w-5 h-5 text-rose-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+          <div class="text-sm space-y-1">
+            <p class="font-semibold text-rose-200">Gagal memproses file</p>
+            <p id="errorMessage" class="text-rose-300/90 break-words"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workspace Section (Shown after KMZ is loaded) -->
+    <section id="workspaceSection" class="hidden space-y-6">
+
+      <!-- Top Action & Bulk Folder ZIP Bar -->
+      <div class="bg-field-surface border border-field-border rounded-2xl p-4 sm:p-6 shadow-lg">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div class="min-w-0 space-y-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-sky-500/15 text-sky-300 border border-sky-400/30">
+                KMZ TERMUAT
+              </span>
+              <h2 id="loadedFileName" class="text-base sm:text-xl font-bold text-white truncate">file.kmz</h2>
+            </div>
+            <p id="loadedFileSummary" class="text-xs sm:text-sm text-slate-400">
+              Menampilkan daftar penanda beserta foto di dalamnya.
+            </p>
+          </div>
+
+          <!-- Prominent Bulk Download Per Folder Penanda Button -->
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+            <button
+              id="btnDownloadAllFoldersZip"
+              type="button"
+              onclick="downloadAllByPlacemarkFolderZip()"
+              class="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-45 disabled:cursor-not-allowed text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-emerald-500/15 transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              <span>Download Semua (.ZIP) per Folder Penanda</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ZIP Progress Bar (Visible during ZIP generation) -->
+        <div id="zipProgressBox" class="hidden mt-4 pt-4 border-t border-field-border space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span id="zipProgressLabel" class="font-medium text-emerald-300">Menyiapkan arsip ZIP per folder penanda...</span>
+            <span id="zipProgressPercent" class="font-mono text-slate-300">0%</span>
+          </div>
+          <div class="w-full h-2.5 rounded-full bg-field-bg overflow-hidden border border-field-border">
+            <div id="zipProgressBar" class="h-full bg-emerald-400 transition-all duration-150" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Stats -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-field-surface border border-field-border rounded-2xl p-4 sm:p-5">
+          <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Total Penanda (&lt;Placemark&gt;)</p>
+          <p id="statTotalPlacemarks" class="text-2xl sm:text-3xl font-bold text-white mt-1">0</p>
+        </div>
+        <div class="bg-field-surface border border-field-border rounded-2xl p-4 sm:p-5">
+          <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Penanda Berfoto</p>
+          <p id="statWithPhotos" class="text-2xl sm:text-3xl font-bold text-sky-400 mt-1">0</p>
+        </div>
+        <div class="bg-field-surface border border-field-border rounded-2xl p-4 sm:p-5">
+          <p class="text-xs font-medium uppercase tracking-wider text-slate-400">Total Foto Terpetakan</p>
+          <p id="statTotalPhotos" class="text-2xl sm:text-3xl font-bold text-emerald-400 mt-1">0</p>
+        </div>
+      </div>
+
+      <!-- Search & Filter Bar -->
+      <div class="bg-field-surface border border-field-border rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div class="relative flex-1">
+          <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+          <input
+            type="text"
+            id="searchPlacemarkInput"
+            oninput="renderPlacemarksList()"
+            placeholder="Cari nama penanda (contoh: NP_001, Telkom_002, PLN_001)..."
+            class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-field-bg border border-field-border text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition"
+          />
+        </div>
+
+        <label class="inline-flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer select-none">
+          <input
+            type="checkbox"
+            id="onlyWithPhotosCheckbox"
+            checked
+            onchange="renderPlacemarksList()"
+            class="w-4 h-4 rounded accent-sky-500 cursor-pointer"
+          />
+          <span class="text-xs sm:text-sm font-medium text-slate-200">Hanya penanda yang memiliki foto</span>
+        </label>
+      </div>
+
+      <!-- Placemarks Container -->
+      <div id="placemarksContainer" class="space-y-5"></div>
+
+      <!-- Empty Filter State -->
+      <div id="emptyFilterState" class="hidden bg-field-surface border border-field-border rounded-2xl p-10 text-center">
+        <p class="text-base font-semibold text-slate-200">Tidak ada penanda yang sesuai filter</p>
+        <p class="text-xs sm:text-sm text-slate-400 mt-1">Coba ubah kata kunci pencarian atau centang/hapus centang filter penanda berfoto.</p>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-field-border bg-field-surface/70 mt-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+      <span>KMZ Photo Extractor per Penanda — Siap untuk dokumentasi lapangan</span>
+      <span class="font-mono text-[11px] text-slate-300">[Nama_Penanda]/[Nama_Penanda]_[Urutan]_[NamaFileAsli].jpg</span>
+    </div>
+  </footer>
+
+  <!-- Lightbox Modal -->
+  <div
+    id="lightboxModal"
+    onclick="handleLightboxBackdrop(event)"
+    class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4"
+  >
+    <div class="max-w-5xl w-full flex items-center justify-between gap-3 mb-3" onclick="event.stopPropagation()">
+      <div class="min-w-0">
+        <h3 id="lightboxTitle" class="text-base sm:text-lg font-bold text-white truncate">NP_001</h3>
+        <p id="lightboxFile" class="text-xs text-slate-400 font-mono truncate">NP_001_1_TimePhoto.jpg</p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          id="lightboxDownloadBtn"
+          type="button"
+          class="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs sm:text-sm transition flex items-center gap-1.5 cursor-pointer"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          <span>Download</span>
+        </button>
+        <button
+          type="button"
+          onclick="closeLightbox()"
+          class="p-2 rounded-xl bg-field-elevated hover:bg-slate-700 text-slate-200 border border-field-border transition cursor-pointer"
+          aria-label="Tutup pratinjau"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="max-w-5xl max-h-[78vh] flex items-center justify-center" onclick="event.stopPropagation()">
+      <img
+        id="lightboxImage"
+        src=""
+        alt="Pratinjau Foto Penanda"
+        class="max-w-full max-h-[76vh] object-contain rounded-xl border border-field-border shadow-2xl bg-field-surface"
+      />
+    </div>
   </div>
 
   <script>
-    const pickBtn = document.getElementById("pickBtn");
-    const kmzInput = document.getElementById("kmzInput");
-    const statusEl = document.getElementById("status");
-    const resultEl = document.getElementById("result");
+    /**
+     * State aplikasi yang menyimpan data hasil parsing KMZ/KML secara lokal.
+     */
+    const state = {
+      fileName: '',
+      placemarks: [],     // { id, name, folderPath, photos: [{ index, rawSrc, originalName, fileName, blob, url, isMissing }] }
+      assetsByPath: new Map(),
+      assetsByBase: new Map(),
+      objectUrls: [],
+      isGeneratingZip: false
+    };
 
-    pickBtn.addEventListener("click", () => kmzInput.click());
+    const IMAGE_EXT_PATTERN = /\.(jpg|jpeg|png|gif|webp|bmp)$/i;
 
-    kmzInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    /**
+     * Inisialisasi event listener saat halaman siap.
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+      const fileInput = document.getElementById('kmzFileInput');
+      const dropZone = document.getElementById('dropZone');
 
-      resultEl.innerHTML = "";
-      statusEl.textContent = "Membaca file " + file.name + "...";
+      // Handler utama pemilihan file via tombol "Pilih File .KMZ"
+      fileInput.addEventListener('change', (event) => {
+        const selectedFiles = Array.from(event.target.files || []);
+        event.target.value = ''; // Reset agar file yang sama bisa dipilih ulang
+        if (selectedFiles.length > 0) {
+          processSelectedFile(selectedFiles[0]);
+        }
+      });
+
+      // Handler Drag & Drop (dengan pencegahan default agar file tidak terbuka di tab baru)
+      ['dragenter', 'dragover'].forEach((evt) => {
+        dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'copy';
+          }
+          dropZone.classList.add('border-sky-400', 'bg-sky-500/10');
+        });
+      });
+
+      ['dragleave', 'dragend'].forEach((evt) => {
+        dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!dropZone.contains(e.relatedTarget)) {
+            dropZone.classList.remove('border-sky-400', 'bg-sky-500/10');
+          }
+        });
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('border-sky-400', 'bg-sky-500/10');
+
+        const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+        if (files.length === 0) {
+          showErrorState('Tidak ada file yang terdeteksi saat di-drop. Silakan klik tombol "Pilih File .KMZ".');
+          return;
+        }
+        processSelectedFile(files[0]);
+      });
+
+      // Tutup lightbox dengan tombol Escape
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeLightbox();
+        }
+      });
+    });
+
+    /**
+     * Memicu dialog pemilihan file dengan aman.
+     */
+    function triggerFilePicker() {
+      try {
+        const input = document.getElementById('kmzFileInput');
+        if (!input) {
+          showToast('Elemen input file tidak ditemukan.', 'error');
+          return;
+        }
+        if (typeof input.showPicker === 'function') {
+          try {
+            input.showPicker();
+            return;
+          } catch (_) {
+            // Fallback ke click() jika showPicker diblokir konteks iframe
+          }
+        }
+        input.click();
+      } catch (err) {
+        showErrorState('Tidak dapat membuka dialog file: ' + (err.message || err));
+      }
+    }
+
+    /**
+     * Reset state & kembali ke tampilan unggah.
+     */
+    function resetWorkspace() {
+      state.objectUrls.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (_) {}
+      });
+      state.objectUrls = [];
+      state.assetsByPath.clear();
+      state.assetsByBase.clear();
+      state.placemarks = [];
+      state.fileName = '';
+
+      document.getElementById('searchPlacemarkInput').value = '';
+      document.getElementById('onlyWithPhotosCheckbox').checked = true;
+      document.getElementById('workspaceSection').classList.add('hidden');
+      document.getElementById('btnResetHeader').classList.add('hidden');
+      document.getElementById('uploadSection').classList.remove('hidden');
+      document.getElementById('statusPanel').classList.add('hidden');
+      document.getElementById('zipProgressBox').classList.add('hidden');
+    }
+
+    /**
+     * Menampilkan pesan loading pada panel status.
+     */
+    function showLoadingState(message) {
+      const panel = document.getElementById('statusPanel');
+      const loadingRow = document.getElementById('loadingRow');
+      const errorRow = document.getElementById('errorRow');
+      document.getElementById('loadingMessage').textContent = message;
+
+      panel.classList.remove('hidden');
+      loadingRow.classList.remove('hidden');
+      errorRow.classList.add('hidden');
+      errorRow.classList.remove('flex');
+    }
+
+    /**
+     * Menampilkan pesan error yang jelas jika proses gagal.
+     */
+    function showErrorState(message) {
+      const panel = document.getElementById('statusPanel');
+      const loadingRow = document.getElementById('loadingRow');
+      const errorRow = document.getElementById('errorRow');
+      document.getElementById('errorMessage').textContent = message;
+
+      panel.classList.remove('hidden');
+      loadingRow.classList.add('hidden');
+      errorRow.classList.remove('hidden');
+      errorRow.classList.add('flex');
+      showToast(message, 'error');
+    }
+
+    /**
+     * Menampilkan notifikasi toast.
+     */
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const palette = {
+        info: 'bg-field-elevated text-slate-100 border-sky-500/40',
+        success: 'bg-emerald-950/95 text-emerald-200 border-emerald-500/50',
+        error: 'bg-rose-950/95 text-rose-200 border-rose-500/50',
+        warning: 'bg-amber-950/95 text-amber-200 border-amber-500/50'
+      };
+
+      toast.className = `pointer-events-auto border rounded-xl px-4 py-3 text-xs sm:text-sm font-medium shadow-xl transition-all duration-200 ${palette[type] || palette.info}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 250);
+      }, 3600);
+    }
+
+    /**
+     * Memproses file .KMZ yang dipilih atau di-drop oleh pengguna.
+     */
+    async function processSelectedFile(file) {
+      resetWorkspace();
+      showLoadingState(`Membuka "${file.name}" dan memeriksa pustaka JSZip...`);
 
       try {
-        if (typeof JSZip === "undefined") {
-          throw new Error("Library JSZip gagal dimuat (cek koneksi internet atau blokir script).");
+        if (typeof JSZip === 'undefined') {
+          throw new Error(
+            'Pustaka JSZip tidak tersedia. Pastikan koneksi internet aktif atau izinkan pemuatan script dari cdnjs.cloudflare.com.'
+          );
         }
+
+        const lowerName = file.name.toLowerCase();
+        if (!lowerName.endsWith('.kmz') && !lowerName.endsWith('.zip')) {
+          throw new Error(`File "${file.name}" bukan format .kmz yang didukung.`);
+        }
+
+        state.fileName = file.name;
+        showLoadingState(`Mengekstrak isi arsip "${file.name}"...`);
 
         const zip = await JSZip.loadAsync(file);
-        const allEntries = Object.keys(zip.files);
+        const entries = Object.values(zip.files).filter((entry) => !entry.dir);
 
-        // Cari file KML (biasanya doc.kml)
-        const kmlName = allEntries.find(n => !zip.files[n].dir && n.toLowerCase().endsWith(".kml"));
-        if (!kmlName) {
-          throw new Error("File .kml tidak ditemukan di dalam KMZ.");
+        if (entries.length === 0) {
+          throw new Error('Arsip KMZ kosong atau tidak berisi file apa pun.');
         }
 
-        const kmlText = await zip.files[kmlName].async("string");
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(kmlText, "text/xml");
+        // Cari file KML di dalam arsip (prioritas doc.kml, lalu file *.kml lainnya)
+        const kmlEntry =
+          entries.find((e) => e.name.toLowerCase() === 'doc.kml') ||
+          entries.find((e) => e.name.toLowerCase().endsWith('/doc.kml')) ||
+          entries.find((e) => e.name.toLowerCase().endsWith('.kml'));
 
-        const placemarks = Array.from(xmlDoc.getElementsByTagName("Placemark"));
-        let foundCount = 0;
-
-        for (const pm of placemarks) {
-          const nameNode = pm.getElementsByTagName("name")[0];
-          const descNode = pm.getElementsByTagName("description")[0];
-
-          const pmName = (nameNode && nameNode.textContent ? nameNode.textContent.trim() : "Tanpa_Nama")
-            .replace(/[\\/:*?"<>|]/g, "_");
-          const descText = descNode ? (descNode.textContent || "") : "";
-
-          // Ambil nama file gambar yang direferensikan di description
-          const matches = [...descText.matchAll(/(?:files[\\/])?([^\s"'<>]+\.(?:jpg|jpeg|png|webp))/gi)];
-          const uniqueFiles = [...new Set(matches.map(m => m[1].replace(/\\/g, "/")))];
-
-          if (uniqueFiles.length === 0) continue;
-
-          const card = document.createElement("div");
-          card.className = "placemark";
-
-          const title = document.createElement("div");
-          title.className = "pm-title";
-          title.textContent = pmName + " (" + uniqueFiles.length + " foto)";
-          card.appendChild(title);
-
-          const grid = document.createElement("div");
-          grid.className = "photos";
-
-          let idx = 1;
-          for (const rawFile of uniqueFiles) {
-            const baseName = rawFile.split("/").pop();
-            const zipEntryKey = allEntries.find(k => !zip.files[k].dir && (k === rawFile || k === "files/" + baseName || k.endsWith("/" + baseName)));
-            if (!zipEntryKey) continue;
-
-            const blob = await zip.files[zipEntryKey].async("blob");
-            const url = URL.createObjectURL(blob);
-            const downloadName = `${pmName}_${idx}_${baseName}`;
-            idx++;
-            foundCount++;
-
-            const pCard = document.createElement("div");
-            pCard.className = "photo-card";
-            pCard.innerHTML = `
-              <img src="${url}" alt="${downloadName}" />
-              <div class="photo-name">${downloadName}</div>
-              <a class="btn" href="${url}" download="${downloadName}">Download</a>
-            `;
-            grid.appendChild(pCard);
-          }
-
-          if (grid.children.length > 0) {
-            card.appendChild(grid);
-            resultEl.appendChild(card);
-          }
+        if (!kmlEntry) {
+          throw new Error('Tidak ditemukan file .kml (seperti doc.kml) di dalam arsip KMZ.');
         }
 
-        statusEl.textContent = `Selesai. Total foto terpetakan: ${foundCount}`;
+        // Ekstrak seluruh file gambar yang ada di dalam KMZ
+        const imageEntries = entries.filter((e) => IMAGE_EXT_PATTERN.test(e.name));
+        showLoadingState(`Memuat ${imageEntries.length} file gambar dari dalam KMZ...`);
+
+        for (let i = 0; i < imageEntries.length; i++) {
+          const imgEntry = imageEntries[i];
+          const rawBlob = await imgEntry.async('blob');
+          const mimeType = inferMimeType(imgEntry.name);
+          const typedBlob = rawBlob.type ? rawBlob : new Blob([rawBlob], { type: mimeType });
+          const blobUrl = URL.createObjectURL(typedBlob);
+          state.objectUrls.push(blobUrl);
+
+          registerImageAsset(imgEntry.name, typedBlob, blobUrl);
+        }
+
+        showLoadingState('Membaca struktur <Placemark> dan mencocokkan foto...');
+        const kmlContent = await kmlEntry.async('string');
+        parseKmlAndMatchPhotos(kmlContent);
+
+        // Tampilkan workspace
+        document.getElementById('uploadSection').classList.add('hidden');
+        document.getElementById('statusPanel').classList.add('hidden');
+        document.getElementById('workspaceSection').classList.remove('hidden');
+        document.getElementById('btnResetHeader').classList.remove('hidden');
+
+        updateWorkspaceSummary();
+        renderPlacemarksList();
+        showToast(`Selesai memproses "${file.name}".`, 'success');
       } catch (err) {
-        statusEl.textContent = "Error: " + err.message;
+        console.error('Error memproses KMZ:', err);
+        showErrorState(err && err.message ? err.message : 'Terjadi kesalahan saat membaca file KMZ.');
       }
-    });
+    }
+
+    /**
+     * Mendaftarkan aset gambar ke map berdasarkan path relatif dan nama file dasar.
+     */
+    function registerImageAsset(entryPath, blob, blobUrl) {
+      const normalized = entryPath.replace(/\\/g, '/').replace(/^\.?\//, '');
+      const baseName = normalized.split('/').pop() || normalized;
+      const record = {
+        path: normalized,
+        baseName: baseName,
+        blob: blob,
+        url: blobUrl
+      };
+
+      state.assetsByPath.set(normalized.toLowerCase(), record);
+      if (!state.assetsByBase.has(baseName.toLowerCase())) {
+        state.assetsByBase.set(baseName.toLowerCase(), record);
+      }
+    }
+
+    /**
+     * Mem-parsing XML KML dan memetakan setiap <Placemark> ke foto-foto yang direferensikan.
+     */
+    function parseKmlAndMatchPhotos(kmlText) {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(kmlText, 'text/xml');
+
+      if (xmlDoc.querySelector('parsererror')) {
+        throw new Error('Struktur XML pada file KML di dalam arsip tidak valid atau rusak.');
+      }
+
+      const placemarks = [];
+      let counter = 0;
+
+      function walk(node, folderChain) {
+        if (!node || node.nodeType !== 1) return;
+        const tagName = node.localName || node.nodeName.split(':').pop();
+
+        if (tagName === 'Folder') {
+          const fNameEl = getDirectChildByTag(node, 'name');
+          const fName = fNameEl && fNameEl.textContent ? fNameEl.textContent.trim() : 'Folder';
+          const nextChain = [...folderChain, fName];
+          Array.from(node.children).forEach((child) => walk(child, nextChain));
+          return;
+        }
+
+        if (tagName === 'Placemark') {
+          counter++;
+          const nameEl = getDirectChildByTag(node, 'name');
+          const descEl = getDirectChildByTag(node, 'description');
+
+          const rawPlacemarkName =
+            nameEl && nameEl.textContent && nameEl.textContent.trim()
+              ? nameEl.textContent.trim()
+              : `Penanda_${String(counter).padStart(3, '0')}`;
+
+          const safePlacemarkName = sanitizeName(rawPlacemarkName);
+          const descString = extractDescriptionString(descEl);
+          const imageRefs = extractImagePathsFromDescription(descString);
+
+          const photos = [];
+          imageRefs.forEach((rawRef, idx) => {
+            const photoNumber = idx + 1;
+            const resolvedAsset = findMatchingAsset(rawRef);
+            const originalFileName = extractOriginalFileName(rawRef, photoNumber);
+            const formattedFileName = `${safePlacemarkName}_${photoNumber}_${originalFileName}`;
+
+            photos.push({
+              index: photoNumber,
+              rawSrc: rawRef,
+              originalName: originalFileName,
+              fileName: formattedFileName,
+              blob: resolvedAsset ? resolvedAsset.blob : null,
+              url: resolvedAsset ? resolvedAsset.url : '',
+              isMissing: !resolvedAsset
+            });
+          });
+
+          placemarks.push({
+            id: `pm_${counter}`,
+            name: rawPlacemarkName,
+            safeName: safePlacemarkName,
+            folderPath: folderChain.join(' / '),
+            photos: photos
+          });
+          return;
+        }
+
+        Array.from(node.children).forEach((child) => walk(child, folderChain));
+      }
+
+      walk(xmlDoc.documentElement, []);
+      state.placemarks = placemarks;
+    }
+
+    /**
+     * Mengambil direct child element berdasarkan tag/localName.
+     */
+    function getDirectChildByTag(parent, targetTag) {
+      for (const child of parent.children) {
+        const local = child.localName || child.nodeName.split(':').pop();
+        if (local === targetTag) {
+          return child;
+        }
+      }
+      return null;
+    }
+
+    /**
+     * Mengambil string isi <description> (mendukung CDATA, teks ter-escape, maupun HTML langsung).
+     */
+    function extractDescriptionString(descEl) {
+      if (!descEl) return '';
+      if (descEl.children && descEl.children.length > 0) {
+        const serializer = new XMLSerializer();
+        return Array.from(descEl.childNodes)
+          .map((n) => serializer.serializeToString(n))
+          .join('');
+      }
+      return descEl.textContent || '';
+    }
+
+    /**
+     * Mengekstrak referensi file gambar dari dalam <description> (seperti files/TimePhoto_...jpg atau images/...).
+     */
+    function extractImagePathsFromDescription(descText) {
+      if (!descText) return [];
+      const results = [];
+      const seen = new Set();
+
+      const addUnique = (val) => {
+        if (!val) return;
+        const trimmed = val.trim();
+        if (!trimmed) return;
+        const key = trimmed.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(trimmed);
+        }
+      };
+
+      // 1. Cek atribut src pada elemen <img> jika ter-parse sebagai HTML
+      try {
+        const doc = new DOMParser().parseFromString(descText, 'text/html');
+        doc.querySelectorAll('img').forEach((img) => {
+          const src = img.getAttribute('src');
+          if (src) addUnique(src);
+        });
+      } catch (_) {}
+
+      // 2. Cocokkan pola path seperti files/...jpg, images/...png, atau nama file gambar langsung
+      const pattern = /(?:src\s*=\s*["']([^"']+)["'])|(?:(?:files|images)[\/\\][^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp|bmp))|(?:[^\s"'<>\/\\]+\.(?:jpg|jpeg|png|gif|webp|bmp))/gi;
+      let match;
+      while ((match = pattern.exec(descText)) !== null) {
+        const candidate = match[1] || match[0];
+        if (candidate && IMAGE_EXT_PATTERN.test(candidate.split('?')[0])) {
+          addUnique(candidate);
+        }
+      }
+
+      return results;
+    }
+
+    /**
+     * Mencari file aset gambar yang cocok di dalam KMZ.
+     */
+    function findMatchingAsset(rawSrc) {
+      let decoded = rawSrc;
+      try {
+        decoded = decodeURIComponent(rawSrc);
+      } catch (_) {}
+
+      const cleanPath = decoded.split('?')[0].replace(/\\/g, '/').replace(/^\.?\//, '').toLowerCase();
+      const baseName = cleanPath.split('/').pop() || cleanPath;
+
+      return state.assetsByPath.get(cleanPath) || state.assetsByBase.get(baseName) || null;
+    }
+
+    /**
+     * Membersihkan nama penanda/file agar aman untuk nama folder & file.
+     */
+    function sanitizeName(str) {
+      return (
+        String(str || '')
+          .replace(/[\\/:*?"<>|]/g, '_')
+          .replace(/\s+/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_|_$/g, '') || 'Penanda'
+      );
+    }
+
+    /**
+     * Mengambil nama file asli beserta ekstensi dari referensi gambar.
+     */
+    function extractOriginalFileName(rawSrc, index) {
+      let clean = rawSrc.split('?')[0].replace(/\\/g, '/');
+      try {
+        clean = decodeURIComponent(clean);
+      } catch (_) {}
+      const base = clean.split('/').pop() || `foto_${index}.jpg`;
+      const dotIdx = base.lastIndexOf('.');
+      if (dotIdx > 0) {
+        const stem = sanitizeName(base.slice(0, dotIdx));
+        const ext = base.slice(dotIdx + 1).toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        return `${stem}.${ext}`;
+      }
+      return `${sanitizeName(base)}.jpg`;
+    }
+
+    /**
+     * Menebak MIME type dari ekstensi file.
+     */
+    function inferMimeType(filename) {
+      const lower = filename.toLowerCase();
+      if (lower.endsWith('.png')) return 'image/png';
+      if (lower.endsWith('.webp')) return 'image/webp';
+      if (lower.endsWith('.gif')) return 'image/gif';
+      if (lower.endsWith('.bmp')) return 'image/bmp';
+      return 'image/jpeg';
+    }
+
+    /**
+     * Memperbarui statistik ringkasan & status tombol ZIP massal.
+     */
+    function updateWorkspaceSummary() {
+      const totalPlacemarks = state.placemarks.length;
+      const withPhotosCount = state.placemarks.filter((p) => p.photos.some((ph) => !ph.isMissing)).length;
+      const totalAvailablePhotos = state.placemarks.reduce(
+        (sum, p) => sum + p.photos.filter((ph) => !ph.isMissing).length,
+        0
+      );
+
+      document.getElementById('loadedFileName').textContent = state.fileName;
+      document.getElementById('loadedFileSummary').textContent =
+        `Ditemukan ${totalAvailablePhotos} foto siap unduh pada ${withPhotosCount} dari ${totalPlacemarks} penanda.`;
+
+      document.getElementById('statTotalPlacemarks').textContent = totalPlacemarks;
+      document.getElementById('statWithPhotos').textContent = withPhotosCount;
+      document.getElementById('statTotalPhotos').textContent = totalAvailablePhotos;
+
+      const bulkBtn = document.getElementById('btnDownloadAllFoldersZip');
+      bulkBtn.disabled = totalAvailablePhotos === 0 || state.isGeneratingZip;
+    }
+
+    /**
+     * Merender daftar penanda beserta pratinjau foto dan tombol download per foto.
+     */
+    function renderPlacemarksList() {
+      const container = document.getElementById('placemarksContainer');
+      const emptyState = document.getElementById('emptyFilterState');
+      const keyword = document.getElementById('searchPlacemarkInput').value.trim().toLowerCase();
+      const onlyWithPhotos = document.getElementById('onlyWithPhotosCheckbox').checked;
+
+      const filtered = state.placemarks.filter((pm) => {
+        const availablePhotos = pm.photos.filter((ph) => !ph.isMissing);
+        if (onlyWithPhotos && availablePhotos.length === 0) return false;
+        if (!keyword) return true;
+        return (
+          pm.name.toLowerCase().includes(keyword) ||
+          pm.folderPath.toLowerCase().includes(keyword) ||
+          pm.photos.some((ph) => ph.fileName.toLowerCase().includes(keyword))
+        );
+      });
+
+      container.innerHTML = '';
+
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      filtered.forEach((pm) => {
+        const validPhotos = pm.photos.filter((ph) => !ph.isMissing);
+        const card = document.createElement('article');
+        card.className = 'bg-field-surface border border-field-border rounded-2xl overflow-hidden shadow-md';
+
+        const header = document.createElement('div');
+        header.className = 'px-4 sm:px-6 py-4 bg-field-elevated/70 border-b border-field-border flex flex-col sm:flex-row sm:items-center justify-between gap-2';
+        header.innerHTML = `
+          <div class="min-w-0">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <span class="w-2.5 h-2.5 rounded-full ${validPhotos.length > 0 ? 'bg-sky-400' : 'bg-slate-600'}"></span>
+              <h3 class="text-lg sm:text-xl font-bold text-white break-all">${escapeHtml(pm.name)}</h3>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                validPhotos.length > 0
+                  ? 'bg-sky-500/15 text-sky-300 border border-sky-400/30'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+              }">
+                ${validPhotos.length} Foto
+              </span>
+            </div>
+            ${
+              pm.folderPath
+                ? `<p class="text-xs text-slate-400 mt-1 truncate">Folder KML: ${escapeHtml(pm.folderPath)}</p>`
+                : ''
+            }
+          </div>
+          <div class="text-xs font-mono text-slate-400 shrink-0">
+            Folder ZIP: <span class="text-slate-200">${escapeHtml(pm.safeName)}/</span>
+          </div>
+        `;
+
+        const body = document.createElement('div');
+        body.className = 'p-4 sm:p-6';
+
+        if (pm.photos.length === 0) {
+          body.innerHTML = `<p class="text-xs sm:text-sm text-slate-500 text-center py-4">Tidak ada referensi foto pada penanda ini.</p>`;
+        } else {
+          const grid = document.createElement('div');
+          grid.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4';
+
+          pm.photos.forEach((photo, idx) => {
+            const tile = document.createElement('div');
+
+            if (photo.isMissing) {
+              tile.className = 'rounded-xl border border-rose-500/30 bg-rose-950/20 p-4 flex flex-col justify-between gap-2';
+              tile.innerHTML = `
+                <div>
+                  <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/20 text-rose-300 mb-1.5">
+                    Foto #${photo.index} • Tidak Ditemukan
+                  </span>
+                  <p class="text-xs text-rose-200 break-all font-mono">${escapeHtml(photo.rawSrc)}</p>
+                </div>
+                <p class="text-[11px] text-rose-300/75">File tidak ada di dalam arsip KMZ.</p>
+              `;
+              grid.appendChild(tile);
+              return;
+            }
+
+            tile.className = 'rounded-xl border border-field-border bg-field-bg overflow-hidden flex flex-col justify-between hover:border-sky-400/50 transition';
+            tile.innerHTML = `
+              <div>
+                <div
+                  onclick="openPhotoLightbox('${pm.id}', ${idx})"
+                  class="relative aspect-[4/3] bg-black overflow-hidden cursor-zoom-in group"
+                >
+                  <img
+                    src="${photo.url}"
+                    alt="${escapeHtml(photo.fileName)}"
+                    loading="lazy"
+                    onerror="this.onerror=null; this.src='https://placehold.co/600x450/131924/94a3b8?text=Preview+Gagal';"
+                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <span class="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/75 text-white text-xs font-semibold border border-white/10">
+                    #${photo.index}
+                  </span>
+                  <span class="opacity-0 group-hover:opacity-100 transition absolute bottom-2 right-2 px-2 py-1 rounded-md bg-black/80 text-[11px] text-slate-200">
+                    Perbesar
+                  </span>
+                </div>
+
+                <div class="p-3 space-y-1">
+                  <p class="text-xs font-semibold text-white break-all" title="${escapeHtml(photo.fileName)}">
+                    ${escapeHtml(photo.fileName)}
+                  </p>
+                  <p class="text-[11px] text-slate-400 truncate" title="${escapeHtml(photo.originalName)}">
+                    Asli: ${escapeHtml(photo.originalName)}
+                  </p>
+                </div>
+              </div>
+
+              <div class="px-3 pb-3">
+                <button
+                  type="button"
+                  onclick="downloadIndividualPhoto('${pm.id}', ${idx})"
+                  class="w-full py-2 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-slate-950 font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  <span>Download Foto</span>
+                </button>
+              </div>
+            `;
+            grid.appendChild(tile);
+          });
+
+          body.appendChild(grid);
+        }
+
+        card.appendChild(header);
+        card.appendChild(body);
+        container.appendChild(card);
+      });
+    }
+
+    /**
+     * Mengunduh satu foto dengan nama [Nama_Penanda]_[Urutan]_[NamaFileAsli].jpg.
+     */
+    function downloadIndividualPhoto(placemarkId, photoIndex) {
+      try {
+        const pm = state.placemarks.find((item) => item.id === placemarkId);
+        if (!pm || !pm.photos[photoIndex] || pm.photos[photoIndex].isMissing) {
+          showToast('Foto tidak tersedia untuk diunduh.', 'warning');
+          return;
+        }
+        const photo = pm.photos[photoIndex];
+        triggerBlobDownload(photo.blob, photo.fileName);
+        showToast(`Mengunduh ${photo.fileName}`, 'success');
+      } catch (err) {
+        console.error('Gagal mengunduh foto:', err);
+        showToast('Terjadi kesalahan saat mengunduh foto.', 'error');
+      }
+    }
+
+    /**
+     * Membuat dan mengunduh file ZIP keseluruhan dengan struktur folder per penanda:
+     * [Nama_Penanda]/[Nama_Penanda]_[Urutan]_[NamaFileAsli].jpg
+     */
+    async function downloadAllByPlacemarkFolderZip() {
+      if (state.isGeneratingZip) return;
+
+      try {
+        if (typeof JSZip === 'undefined') {
+          throw new Error('Pustaka JSZip tidak tersedia untuk membuat file ZIP.');
+        }
+
+        const placemarksWithPhotos = state.placemarks.filter((pm) =>
+          pm.photos.some((ph) => !ph.isMissing && ph.blob)
+        );
+
+        if (placemarksWithPhotos.length === 0) {
+          showToast('Tidak ada foto valid untuk dikemas ke ZIP.', 'warning');
+          return;
+        }
+
+        state.isGeneratingZip = true;
+        updateWorkspaceSummary();
+
+        const progressBox = document.getElementById('zipProgressBox');
+        const progressLabel = document.getElementById('zipProgressLabel');
+        const progressPercent = document.getElementById('zipProgressPercent');
+        const progressBar = document.getElementById('zipProgressBar');
+
+        progressBox.classList.remove('hidden');
+        progressBar.style.width = '5%';
+        progressPercent.textContent = '5%';
+        progressLabel.textContent = 'Menyusun folder penanda di dalam arsip ZIP...';
+
+        const zip = new JSZip();
+        const folderNameCounts = new Map();
+        let addedCount = 0;
+
+        for (let i = 0; i < placemarksWithPhotos.length; i++) {
+          const pm = placemarksWithPhotos[i];
+          const validPhotos = pm.photos.filter((ph) => !ph.isMissing && ph.blob);
+
+          // Cegah tabrakan nama folder jika terdapat dua penanda dengan nama identik
+          const baseFolder = pm.safeName;
+          const seenCount = folderNameCounts.get(baseFolder) || 0;
+          folderNameCounts.set(baseFolder, seenCount + 1);
+          const uniqueFolderName = seenCount > 0 ? `${baseFolder}_${seenCount + 1}` : baseFolder;
+
+          const folderHandle = zip.folder(uniqueFolderName);
+
+          for (const photo of validPhotos) {
+            const targetFileName =
+              seenCount > 0
+                ? `${uniqueFolderName}_${photo.index}_${photo.originalName}`
+                : photo.fileName;
+            folderHandle.file(targetFileName, photo.blob);
+            addedCount++;
+          }
+
+          const pct = Math.min(75, Math.round(10 + ((i + 1) / placemarksWithPhotos.length) * 65));
+          progressBar.style.width = `${pct}%`;
+          progressPercent.textContent = `${pct}%`;
+          progressLabel.textContent = `Memasukkan foto penanda ${pm.name} (${i + 1}/${placemarksWithPhotos.length})...`;
+        }
+
+        progressLabel.textContent = 'Mengompres file ZIP (mohon tunggu)...';
+        const zipBlob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
+          const compressPct = Math.min(99, Math.round(75 + (metadata.percent || 0) * 0.24));
+          progressBar.style.width = `${compressPct}%`;
+          progressPercent.textContent = `${compressPct}%`;
+        });
+
+        const cleanBaseName = sanitizeName(state.fileName.replace(/\.(kmz|zip)$/i, ''));
+        const outputZipName = `${cleanBaseName}_Foto_Per_Penanda.zip`;
+
+        triggerBlobDownload(zipBlob, outputZipName);
+
+        progressBar.style.width = '100%';
+        progressPercent.textContent = '100%';
+        progressLabel.textContent = `Selesai! ${addedCount} foto dikemas dalam "${outputZipName}".`;
+        showToast(`Berhasil mengunduh ${outputZipName} (${addedCount} foto).`, 'success');
+      } catch (err) {
+        console.error('Gagal membuat ZIP per folder penanda:', err);
+        showErrorState('Gagal membuat file ZIP: ' + (err && err.message ? err.message : err));
+      } finally {
+        state.isGeneratingZip = false;
+        updateWorkspaceSummary();
+      }
+    }
+
+    /**
+     * Memicu unduhan file Blob di browser.
+     */
+    function triggerBlobDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (_) {}
+      }, 1500);
+    }
+
+    /**
+     * Membuka pratinjau foto ukuran penuh pada lightbox.
+     */
+    function openPhotoLightbox(placemarkId, photoIndex) {
+      const pm = state.placemarks.find((item) => item.id === placemarkId);
+      if (!pm || !pm.photos[photoIndex] || pm.photos[photoIndex].isMissing) return;
+      const photo = pm.photos[photoIndex];
+
+      document.getElementById('lightboxTitle').textContent = `${pm.name} • Foto #${photo.index}`;
+      document.getElementById('lightboxFile').textContent = photo.fileName;
+      document.getElementById('lightboxImage').src = photo.url;
+
+      const dlBtn = document.getElementById('lightboxDownloadBtn');
+      dlBtn.onclick = () => downloadIndividualPhoto(placemarkId, photoIndex);
+
+      document.getElementById('lightboxModal').classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+    }
+
+    function handleLightboxBackdrop(event) {
+      if (event.target && event.target.id === 'lightboxModal') {
+        closeLightbox();
+      }
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightboxModal').classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    /**
+     * Escape karakter HTML untuk keamanan rendering.
+     */
+    function escapeHtml(text) {
+      return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
   </script>
 </body>
 </html>
